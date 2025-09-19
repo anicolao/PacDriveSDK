@@ -8,23 +8,22 @@ This file provides a set of example commands for the `usbbutton_tool` and descri
 
 ### Example 1: Default Mode (Send all keys)
 
-This command configures the button to type "hello world" when pressed.
+This command configures the button to type "hello" when pressed.
 
 **Command:**
 ```bash
-./usbbutton_tool --configure --permanent --mode default --text "hello world" --released-color 0,255,0 --pressed-color 255,0,0
+./usbbutton_tool --configure --permanent --mode default --text "hello" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Expected Effect:**
-1.  **Initial State:** The button's LED should be green.
-2.  **Press and Hold:** The LED should turn red.
-3.  **Typing:** When you press and release the button, it should type "hello world".
+*   The button's LED should be green.
+*   When you press the button, it should type "hello".
 
 ---
 
 ### Example 2: Alternate Mode
 
-This command configures the button to type "first" on the first press, and "second" on the second press, and so on.
+This command configures the button to type "first" on the first press, and "second" on the second press.
 
 **Command:**
 ```bash
@@ -32,32 +31,33 @@ This command configures the button to type "first" on the first press, and "seco
 ```
 
 **Expected Effect:**
-1.  **Initial State:** The button's LED should be green.
-2.  **First Press:** When you press the button, it should type "first".
-3.  **Second Press:** When you press the button again, it should type "second".
-4.  **Third Press:** It should type "first" again.
+*   The button's LED should be green.
+*   On the first press, it should type "first".
+*   On the second press, it should type "second".
 
 ---
 
-### Example 3: Extended Mode
+### Example 3: Extended Mode (Multimedia Keys)
 
-This command configures the button to type "short" on a short press, and "long" on a long press.
+This command configures the button to act as a set of multimedia keys. This tests the new hypothesis about extended mode.
 
 **Command:**
 ```bash
-./usbbutton_tool --configure --permanent --mode extended --text1 "short" --text2 "long" --released-color 0,255,0 --pressed-color 255,0,0
+./usbbutton_tool --configure --permanent --mode extended --keys "volume_up,volume_down,mute" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Expected Effect:**
-1.  **Initial State:** The button's LED should be green.
-2.  **Short Press:** A quick press and release should type "short".
-3.  **Long Press:** Pressing and holding the button for a second or two before releasing should type "long".
+*   The button's LED should be green.
+*   The first press should increase the system volume.
+*   The second press should decrease the system volume.
+*   The third press should mute/unmute the system volume.
+*   Subsequent presses should cycle through these three actions.
 
 ---
 
 ### Example 4: Single Key (Hold) Mode
 
-This command configures the button to act like a single keyboard key ('a').
+This command configures the button to act like the 'a' key on a keyboard.
 
 **Command:**
 ```bash
@@ -65,9 +65,9 @@ This command configures the button to act like a single keyboard key ('a').
 ```
 
 **Expected Effect:**
-1.  **Initial State:** The button's LED should be green.
-2.  **Press and Hold:** The LED should turn red. While you are holding the button down, it should act as if you are holding down the 'a' key on your keyboard (e.g., it should type 'aaaaaaaaa...').
-3.  **Release:** When you release the button, the 'a' key should also be released.
+*   The button's LED should be green.
+*   When you press and hold the button, it should act as if you are holding down the 'a' key (e.g., it should type 'aaaaaaaaa...').
+*   When you release the button, the 'a' key should also be released.
 
 ---
 
@@ -87,4 +87,4 @@ The tool should print: `Button state: Released`
 
 ### A Note on Control Sequences (e.g., Ctrl+R)
 
-Support for sending modifier keys like `Ctrl`, `Shift`, or `Alt` is not yet implemented. The device's configuration protocol for this is not documented in the available source code. This feature can be added in the future if more information becomes available.
+Support for sending modifier keys like `Ctrl`, `Shift`, or `Alt` is not yet implemented, as the protocol for this is not documented in the available materials.
