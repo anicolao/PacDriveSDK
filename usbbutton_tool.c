@@ -6,8 +6,8 @@
 
 #define VENDOR_ID 0xd209
 #define PRODUCT_ID 0x1200
+#define KEY_BUFFER_SIZE 54
 #define TEXT_CHUNK_SIZE 24
-#define TEXT_BUFFER_SIZE (TEXT_CHUNK_SIZE * 2)
 
 typedef struct {
     const char *name;
@@ -15,36 +15,23 @@ typedef struct {
 } KeyCode;
 
 KeyCode consumer_keys[] = {
-    {"play_pause", 0xCD},
-    {"stop", 0xB7},
-    {"scan_next", 0xB5},
-    {"scan_prev", 0xB6},
-    {"volume_up", 0xE9},
-    {"volume_down", 0xEA},
-    {"mute", 0xE2},
-    {NULL, 0}
+    {"play_pause", 0xCD}, {"stop", 0xB7}, {"scan_next", 0xB5},
+    {"scan_prev", 0xB6}, {"volume_up", 0xE9}, {"volume_down", 0xEA},
+    {"mute", 0xE2}, {NULL, 0}
 };
 
 void print_usage() {
-    printf("Usage: usbbutton_tool <command> [options]\n");
-    printf("\nCommands:\n");
-    printf("  --configure           Configure the button's behavior and colors.\n");
-    printf("  --set-color           Set the button's current color.\n");
-    printf("  --get-state           Get the button's pressed/released state.\n");
-    printf("\nOptions for --configure:\n");
+    printf("Usage: usbbutton_tool --configure [options]\n");
+    printf("\nOptions:\n");
     printf("  --permanent           Make the configuration permanent.\n");
     printf("  --released-color R,G,B  Set the color when the button is released.\n");
     printf("  --pressed-color R,G,B   Set the color when the button is pressed.\n");
-    printf("  --mode <mode>         Set the operational mode. <mode> can be:\n");
-    printf("                        'default': Send keys from --text on press.\n");
-    printf("                        'alternate': Use --text1 on first press, --text2 on second.\n");
-    printf("                        'extended': Use --keys to send multimedia/extended keys.\n");
+    printf("  --mode <mode>         'default', 'alternate', 'extended', 'macro'\n");
     printf("  --text \"...\"          Text for default mode.\n");
     printf("  --text1 \"...\"         Text for alternate mode (first press).\n");
     printf("  --text2 \"...\"         Text for alternate mode (second press).\n");
-    printf("  --keys \"key1,key2..\"  Comma-separated list of keys for extended mode.\n");
-    printf("                        Available keys: play_pause, stop, scan_next, scan_prev,\n");
-    printf("                                      volume_up, volume_down, mute\n");
+    printf("  --keys \"key1,...\"     Keys for extended mode (e.g., volume_up,mute).\n");
+    printf("  --macro \"...\"         Macro for macro mode. See EXAMPLES.md for format.\n");
     printf("  --verbose             Print the raw data packets being sent.\n");
 }
 
@@ -54,13 +41,6 @@ void print_packet(const unsigned char* data, size_t length) {
         printf("%02x ", data[i]);
     }
     printf("\n");
-}
-
-void parse_color(const char *color_str, unsigned char *r, unsigned char *g, unsigned char *b) {
-    if (sscanf(color_str, "%hhu,%hhu,%hhu", r, g, b) != 3) {
-        fprintf(stderr, "Error: Invalid color format. Use R,G,B.\n");
-        exit(1);
-    }
 }
 
 void encode_text_chunk(const char *text, unsigned char *buffer, int max_len) {
@@ -96,8 +76,39 @@ void encode_consumer_keys(const char *keys_str, unsigned char *buffer, int max_l
     free(keys);
 }
 
+void encode_macro(const char *macro_str, unsigned char *buffer, int max_len) {
+    char *s = strdup(macro_str);
+    char *report_token = strtok(s, ",");
+    int byte_index = 0;
+    while(report_token != NULL && byte_index < max_len) {
+        char *hex_token = strtok(report_token, ":");
+        while(hex_token != NULL && byte_index < max_len) {
+            buffer[byte_index++] = (unsigned char)strtol(hex_token, NULL, 16);
+            hex_token = strtok(NULL, ":");
+        }
+        report_token = strtok(NULL, ",");
+    }
+    free(s);
+}
+
+char* find_config_interface_path() {
+    struct hid_device_info *devs, *cur_dev;
+    devs = hid_enumerate(VENDOR_ID, PRODUCT_ID);
+    cur_dev = devs;
+    char *path = NULL;
+    while (cur_dev) {
+        if (cur_dev->usage_page == 0) {
+            path = strdup(cur_dev->path);
+            break;
+        }
+        cur_dev = cur_dev->next;
+    }
+    hid_free_enumeration(devs);
+    return path;
+}
+
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
+    if (argc < 2 || strcmp(argv[1], "--configure") != 0) {
         print_usage();
         return 1;
     }
@@ -107,96 +118,82 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    hid_device *handle = hid_open(VENDOR_ID, PRODUCT_ID, NULL);
-    if (!handle) {
-        fprintf(stderr, "Error: Unable to open device.\n");
+    char *config_path = find_config_interface_path();
+    if (config_path == NULL) {
+        fprintf(stderr, "Error: Could not find configuration interface for the device.\n");
         hid_exit();
         return 1;
     }
 
-    if (strcmp(argv[1], "--configure") == 0) {
-        unsigned char config_data[62] = {0};
-        unsigned char command = 0x51;
-        int verbose = 0;
-        const char *text = NULL, *text1 = NULL, *text2 = NULL, *keys = NULL;
-        int mode = 2; // default
+    hid_device *handle = hid_open_path(config_path);
+    if (!handle) {
+        fprintf(stderr, "Error: Unable to open device config interface at %s\n", config_path);
+        free(config_path);
+        hid_exit();
+        return 1;
+    }
+    free(config_path);
 
-        for (int i = 2; i < argc; i++) {
-            if (strcmp(argv[i], "--permanent") == 0) command = 0x50;
-            else if (strcmp(argv[i], "--released-color") == 0 && i + 1 < argc) parse_color(argv[++i], &config_data[2], &config_data[3], &config_data[4]);
-            else if (strcmp(argv[i], "--pressed-color") == 0 && i + 1 < argc) parse_color(argv[++i], &config_data[5], &config_data[6], &config_data[7]);
-            else if (strcmp(argv[i], "--text") == 0 && i + 1 < argc) text = argv[++i];
-            else if (strcmp(argv[i], "--text1") == 0 && i + 1 < argc) text1 = argv[++i];
-            else if (strcmp(argv[i], "--text2") == 0 && i + 1 < argc) text2 = argv[++i];
-            else if (strcmp(argv[i], "--keys") == 0 && i + 1 < argc) keys = argv[++i];
-            else if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
-                i++;
-                if (strcmp(argv[i], "alternate") == 0) mode = 0;
-                else if (strcmp(argv[i], "extended") == 0) mode = 1;
-                else if (strcmp(argv[i], "default") == 0) mode = 2;
-                else { fprintf(stderr, "Invalid mode specified.\n"); return 1; }
-            } else if (strcmp(argv[i], "--verbose") == 0) verbose = 1;
-        }
+    unsigned char config_data[62] = {0};
+    unsigned char command = 0x51;
+    int verbose = 0;
+    const char *text = NULL, *text1 = NULL, *text2 = NULL, *keys = NULL, *macro = NULL;
+    int mode = 2;
 
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--permanent") == 0) command = 0x50;
+        else if (strcmp(argv[i], "--released-color") == 0 && i + 1 < argc) sscanf(argv[++i], "%hhu,%hhu,%hhu", &config_data[2], &config_data[3], &config_data[4]);
+        else if (strcmp(argv[i], "--pressed-color") == 0 && i + 1 < argc) sscanf(argv[++i], "%hhu,%hhu,%hhu", &config_data[5], &config_data[6], &config_data[7]);
+        else if (strcmp(argv[i], "--text") == 0 && i + 1 < argc) text = argv[++i];
+        else if (strcmp(argv[i], "--text1") == 0 && i + 1 < argc) text1 = argv[++i];
+        else if (strcmp(argv[i], "--text2") == 0 && i + 1 < argc) text2 = argv[++i];
+        else if (strcmp(argv[i], "--keys") == 0 && i + 1 < argc) keys = argv[++i];
+        else if (strcmp(argv[i], "--macro") == 0 && i + 1 < argc) macro = argv[++i];
+        else if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
+            i++;
+            if (strcmp(argv[i], "alternate") == 0) mode = 0;
+            else if (strcmp(argv[i], "extended") == 0) mode = 1;
+            else if (strcmp(argv[i], "default") == 0) mode = 2;
+            else if (strcmp(argv[i], "macro") == 0) mode = 3;
+            else { fprintf(stderr, "Invalid mode specified.\n"); return 1; }
+        } else if (strcmp(argv[i], "--verbose") == 0) verbose = 1;
+    }
+
+    if (mode == 3) {
+        config_data[0] = 2;
+        if (macro) encode_macro(macro, &config_data[8], KEY_BUFFER_SIZE);
+    } else {
         config_data[0] = mode;
-
-        if (mode == 0) { // alternate
+        if (mode == 0) {
             encode_text_chunk(text1, &config_data[8], TEXT_CHUNK_SIZE);
             encode_text_chunk(text2, &config_data[8 + TEXT_CHUNK_SIZE], TEXT_CHUNK_SIZE);
-        } else if (mode == 1) { // extended
-            if (keys) encode_consumer_keys(keys, &config_data[8], TEXT_BUFFER_SIZE);
-        } else { // default
-            encode_text_chunk(text, &config_data[8], TEXT_BUFFER_SIZE);
-        }
-
-        unsigned char report_buf[65] = {0};
-        report_buf[0] = 0x0;
-        report_buf[1] = command;
-        report_buf[2] = 0xdd;
-        report_buf[3] = config_data[0];
-        report_buf[4] = config_data[1];
-
-        if (verbose) print_packet(report_buf, 5);
-        if (hid_write(handle, report_buf, 5) == -1) {
-            fprintf(stderr, "Error writing command to device.\n");
+        } else if (mode == 1) {
+            if (keys) encode_consumer_keys(keys, &config_data[8], KEY_BUFFER_SIZE);
         } else {
-            for (int i = 0; i < 15; i++) {
-                memcpy(&report_buf[1], &config_data[2 + i * 4], 4);
-                if (verbose) print_packet(report_buf, 5);
-                if (hid_write(handle, report_buf, 5) == -1) {
-                    fprintf(stderr, "Error writing data packet %d.\n", i);
-                    break;
-                }
-            }
-            printf("Configuration sent successfully.\n");
+            encode_text_chunk(text, &config_data[8], KEY_BUFFER_SIZE);
         }
+    }
 
-    } else if (strcmp(argv[1], "--set-color") == 0) {
-        unsigned char r = 0, g = 0, b = 0;
-        if (argc > 2 && strcmp(argv[2], "--color") == 0 && argc > 3) parse_color(argv[3], &r, &g, &b);
-        else print_usage();
+    unsigned char report_buf[65] = {0};
+    report_buf[0] = 0x0;
+    report_buf[1] = command;
+    report_buf[2] = 0xdd;
+    report_buf[3] = config_data[0];
+    report_buf[4] = config_data[1];
 
-        unsigned char report_buf[65] = {0};
-        report_buf[0] = 0x0;
-        report_buf[1] = 0x01;
-        report_buf[2] = r;
-        report_buf[3] = g;
-        report_buf[4] = b;
-        if (hid_write(handle, report_buf, 5) == -1) fprintf(stderr, "Error writing to device.\n");
-        else printf("Color set successfully.\n");
-
-    } else if (strcmp(argv[1], "--get-state") == 0) {
-        unsigned char report_buf[65] = {0};
-        report_buf[0] = 0x0;
-        report_buf[1] = 0x02;
-        if (hid_write(handle, report_buf, 5) == -1) fprintf(stderr, "Error writing to device.\n");
-        else {
-            unsigned char res[2];
-            if (hid_read(handle, res, sizeof(res)) == -1) fprintf(stderr, "Error reading from device.\n");
-            else printf("Button state: %s\n", res[0] ? "Pressed" : "Released");
-        }
+    if (verbose) print_packet(report_buf, 5);
+    if (hid_write(handle, report_buf, 5) == -1) {
+        fprintf(stderr, "Error writing command to device.\n");
     } else {
-        print_usage();
+        for (int i = 0; i < 15; i++) {
+            memcpy(&report_buf[1], &config_data[2 + i * 4], 4);
+            if (verbose) print_packet(report_buf, 5);
+            if (hid_write(handle, report_buf, 5) == -1) {
+                fprintf(stderr, "Error writing data packet %d.\n", i);
+                break;
+            }
+        }
+        printf("Configuration sent successfully.\n");
     }
 
     hid_close(handle);

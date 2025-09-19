@@ -1,18 +1,18 @@
 # USB Button Tool Examples
 
-This file provides a set of example commands for the `usbbutton_tool` and describes the expected behavior for each command. Please run these commands and report back which ones work as expected and which ones do not.
+This document provides examples for the `usbbutton_tool`, which allows you to configure the USB Button's colors and key press actions.
 
-**Note:** You may need to run these commands with `sudo` depending on your system's USB device permissions.
+**Note:** You may need to run these commands with `sudo` depending on your system's USB device permissions. All configuration is done with the `--configure` command.
 
 ---
 
-### Example 1: Default Mode (Send all keys)
+### Example 1: Default Mode (Send Text)
 
 This command configures the button to type "hello" when pressed.
 
 **Command:**
 ```bash
-./usbbutton_tool --configure --permanent --mode default --text "hello" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./usbbutton_tool --configure --permanent --mode default --text "hello" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Expected Effect:**
@@ -21,64 +21,57 @@ This command configures the button to type "hello" when pressed.
 
 ---
 
-### Example 2: Alternate Mode
+### Example 2: Extended Mode (Multimedia Keys)
 
-This command configures the button to type "first" on the first press, and "second" on the second press.
+This command configures the button to send multimedia key commands. The `extended` mode tells the button to interpret the key codes as multimedia keys.
 
 **Command:**
 ```bash
-./usbbutton_tool --configure --permanent --mode alternate --text1 "first" --text2 "second" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./usbbutton_tool --configure --permanent --mode extended --keys "volume_up,volume_down,mute" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Expected Effect:**
 *   The button's LED should be green.
-*   On the first press, it should type "first".
-*   On the second press, it should type "second".
+*   The first press should increase the system volume.
+*   The second press should decrease the system volume.
+*   The third press should mute/unmute the system volume.
 
 ---
 
-### Example 3: Extended Mode (Multimedia Keys) - NEW TEST
+### Example 3: Macro Mode (Ctrl+R)
 
-This command configures the button to send multimedia key commands. This tests our new theory that `extended` mode tells the button to interpret the scancodes as multimedia keys instead of keyboard keys.
+This command configures the button to send a `Ctrl+R` key combination. The `macro` mode tells the button to interpret the data as raw 8-byte HID keyboard reports.
+
+**Format:** `MODIFIER:RESERVED:KEY1:KEY2:KEY3:KEY4:KEY5:KEY6`
 
 **Command:**
 ```bash
-./usbbutton_tool --configure --permanent --mode extended --keys "volume_up,volume_down,mute" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./usbbutton_tool --configure --permanent --mode macro --macro "01:00:15:00:00:00:00:00,00:00:00:00:00:00:00:00" --released-color 0,255,0 --pressed-color 255,0,0
 ```
+
+**Breakdown of the `--macro` string:**
+*   `01:00:15:00:00:00:00:00`: This is the "press" report.
+    *   `01`: Modifier byte for Left Control.
+    *   `15`: HID usage ID for the 'r' key.
+*   `,` : Separates the press report from the release report.
+*   `00:00:00:00:00:00:00:00`: This is the "release" report (all keys and modifiers are up).
 
 **Expected Effect:**
 *   The button's LED should be green.
-*   The first press should **increase the system volume**.
-*   The second press should **decrease the system volume**.
-*   The third press should **mute/unmute the system volume**.
-*   Subsequent presses should cycle through these three actions.
+*   When you press the button, it should send a `Ctrl+R` key combination.
 
 ---
 
 ### Example 4: Single Key (Hold) Mode
 
-This command configures the button to act like the 'a' key on a keyboard.
+This command configures the button to act like the 'a' key on a keyboard. This is a special case of `default` mode.
 
 **Command:**
 ```bash
-./usbbutton_tool --configure --permanent --mode default --text "a" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./usbbutton_tool --configure --permanent --mode default --text "a" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Expected Effect:**
 *   The button's LED should be green.
 *   When you press and hold the button, it should act as if you are holding down the 'a' key (e.g., it should type 'aaaaaaaaa...').
 *   When you release the button, the 'a' key should also be released.
-
----
-
-### Example 5: Get Button State
-
-This command queries the button for its current physical state.
-
-**Command (when NOT pressing the button):**
-```bash
-./usbbutton_tool --get-state
-```
-
-**Expected Effect:**
-The tool should print: `Button state: Released`
