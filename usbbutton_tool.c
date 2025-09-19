@@ -18,8 +18,17 @@ void print_usage() {
     printf("  --released-color R,G,B  Set the color when the button is released (e.g., 0,255,0).\n");
     printf("  --pressed-color R,G,B   Set the color when the button is pressed (e.g., 255,0,0).\n");
     printf("  --text \"some text\"      The text to be typed when the button is pressed.\n");
+    printf("  --verbose             Print the raw data packets being sent.\n");
     printf("\nOptions for --set-color:\n");
     printf("  --color R,G,B           The RGB color to set (e.g., 0,0,255).\n");
+}
+
+void print_packet(const unsigned char* data, size_t length) {
+    printf("Sending packet: ");
+    for (size_t i = 0; i < length; i++) {
+        printf("%02x ", data[i]);
+    }
+    printf("\n");
 }
 
 void parse_color(const char *color_str, unsigned char *r, unsigned char *g, unsigned char *b) {
@@ -67,6 +76,7 @@ int main(int argc, char* argv[]) {
     if (strcmp(argv[1], "--configure") == 0) {
         unsigned char config_data[62] = {0};
         unsigned char command = 0x51; // Temporary by default
+        int verbose = 0;
 
         for (int i = 2; i < argc; i++) {
             if (strcmp(argv[i], "--permanent") == 0) {
@@ -77,6 +87,8 @@ int main(int argc, char* argv[]) {
                 parse_color(argv[++i], &config_data[5], &config_data[6], &config_data[7]);
             } else if (strcmp(argv[i], "--text") == 0 && i + 1 < argc) {
                 encode_text(argv[++i], &config_data[8]);
+            } else if (strcmp(argv[i], "--verbose") == 0) {
+                verbose = 1;
             }
         }
 
@@ -89,12 +101,14 @@ int main(int argc, char* argv[]) {
         report_buf[3] = config_data[0];
         report_buf[4] = config_data[1];
 
+        if (verbose) print_packet(report_buf, 5);
         if (hid_write(handle, report_buf, 5) == -1) {
             fprintf(stderr, "Error writing command to device.\n");
         } else {
             // Send the remaining 60 bytes in 15 chunks of 4
             for (int i = 0; i < 15; i++) {
                 memcpy(&report_buf[1], &config_data[2 + i * 4], 4);
+                if (verbose) print_packet(report_buf, 5);
                 if (hid_write(handle, report_buf, 5) == -1) {
                     fprintf(stderr, "Error writing data packet %d to device.\n", i);
                     break;
@@ -105,10 +119,14 @@ int main(int argc, char* argv[]) {
 
     } else if (strcmp(argv[1], "--set-color") == 0) {
         unsigned char r = 0, g = 0, b = 0;
-        if (argc > 2 && strcmp(argv[2], "--color") == 0 && argc > 3) {
-            parse_color(argv[3], &r, &g, &b);
-        } else {
-            print_usage();
+        int verbose = 0;
+
+        for (int i = 2; i < argc; i++) {
+            if (strcmp(argv[i], "--color") == 0 && i + 1 < argc) {
+                 parse_color(argv[++i], &r, &g, &b);
+            } else if (strcmp(argv[i], "--verbose") == 0) {
+                verbose = 1;
+            }
         }
 
         unsigned char report_buf[65] = {0};
@@ -118,6 +136,7 @@ int main(int argc, char* argv[]) {
         report_buf[3] = g;
         report_buf[4] = b;
 
+        if (verbose) print_packet(report_buf, 5);
         if (hid_write(handle, report_buf, 5) == -1) {
             fprintf(stderr, "Error writing to device.\n");
         } else {
