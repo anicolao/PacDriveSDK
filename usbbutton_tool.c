@@ -76,16 +76,15 @@ void encode_text_chunk(const char *text, unsigned char *buffer, int max_len) {
     }
 }
 
-void encode_extended_keys(const char *keys_str, unsigned char *buffer1, unsigned char *buffer2) {
+void encode_consumer_keys(const char *keys_str, unsigned char *buffer, int max_len) {
     char *keys = strdup(keys_str);
     char *token = strtok(keys, ",");
     int i = 0;
-    while (token != NULL && i < TEXT_CHUNK_SIZE) {
+    while (token != NULL && i < max_len) {
         int found = 0;
         for (int j = 0; consumer_keys[j].name != NULL; j++) {
             if (strcmp(token, consumer_keys[j].name) == 0) {
-                buffer1[i] = 0x0C; // Consumer Page
-                buffer2[i] = consumer_keys[j].id;
+                buffer[i] = consumer_keys[j].id;
                 found = 1;
                 break;
             }
@@ -145,7 +144,7 @@ int main(int argc, char* argv[]) {
             encode_text_chunk(text1, &config_data[8], TEXT_CHUNK_SIZE);
             encode_text_chunk(text2, &config_data[8 + TEXT_CHUNK_SIZE], TEXT_CHUNK_SIZE);
         } else if (mode == 1) { // extended
-            if (keys) encode_extended_keys(keys, &config_data[8], &config_data[8 + TEXT_CHUNK_SIZE]);
+            if (keys) encode_consumer_keys(keys, &config_data[8], TEXT_BUFFER_SIZE);
         } else { // default
             encode_text_chunk(text, &config_data[8], TEXT_BUFFER_SIZE);
         }

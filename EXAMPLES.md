@@ -37,9 +37,9 @@ This command configures the button to type "first" on the first press, and "seco
 
 ---
 
-### Example 3: Extended Mode (Multimedia Keys)
+### Example 3: Extended Mode (Multimedia Keys) - NEW TEST
 
-This command configures the button to act as a set of multimedia keys. This tests the new hypothesis about extended mode.
+This command configures the button to send multimedia key commands. This tests our new theory that `extended` mode tells the button to interpret the scancodes as multimedia keys instead of keyboard keys.
 
 **Command:**
 ```bash
@@ -48,9 +48,9 @@ This command configures the button to act as a set of multimedia keys. This test
 
 **Expected Effect:**
 *   The button's LED should be green.
-*   The first press should increase the system volume.
-*   The second press should decrease the system volume.
-*   The third press should mute/unmute the system volume.
+*   The first press should **increase the system volume**.
+*   The second press should **decrease the system volume**.
+*   The third press should **mute/unmute the system volume**.
 *   Subsequent presses should cycle through these three actions.
 
 ---
@@ -82,9 +82,3 @@ This command queries the button for its current physical state.
 
 **Expected Effect:**
 The tool should print: `Button state: Released`
-
----
-
-### A Note on Control Sequences (e.g., Ctrl+R)
-
-Support for sending modifier keys like `Ctrl`, `Shift`, or `Alt` is not yet implemented, as the protocol for this is not documented in the available materials.
