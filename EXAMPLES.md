@@ -6,44 +6,74 @@ This file provides a set of example commands for the `usbbutton_tool` and descri
 
 ---
 
-### Example 1: Configure Temporary Behavior
+### Example 1: Default Mode (Send all keys)
 
-This command configures the button to have a green released color, a red pressed color, and to type "test" when pressed. This configuration is temporary and will be lost if the button is unplugged.
-
-**Command:**
-```bash
-./usbbutton_tool --configure --released-color 0,255,0 --pressed-color 255,0,0 --text "test"
-```
-
-**Expected Effect:**
-1.  **Initial State:** After running the command, the button's LED should immediately turn green.
-2.  **Press and Hold:** When you press and hold the button, the LED should turn red.
-3.  **Release:** When you release the button, the LED should turn back to green.
-4.  **Typing:** When you press and release the button, it should type the word "test" into any active text editor or terminal.
-
----
-
-### Example 2: Configure Permanent Behavior
-
-This command does the same as Example 1, but this time the configuration is stored permanently in the button's memory. We'll use different colors and text to distinguish it.
+This command configures the button to type "hello world" when pressed.
 
 **Command:**
 ```bash
-./usbbutton_tool --configure --permanent --released-color 0,0,255 --pressed-color 255,255,0 --text "permanent"
+./usbbutton_tool --configure --permanent --mode default --text "hello world" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Expected Effect:**
-1.  **Initial State:** After running the command, the button's LED should immediately turn blue.
-2.  **Press and Hold:** When you press and hold the button, the LED should turn yellow (red + green).
-3.  **Release:** When you release the button, the LED should turn back to blue.
-4.  **Typing:** When you press and release the button, it should type the word "permanent".
-5.  **Persistence:** If you unplug the button and plug it back in, the behavior described in the steps above should persist without needing to run the command again.
+1.  **Initial State:** The button's LED should be green.
+2.  **Press and Hold:** The LED should turn red.
+3.  **Typing:** When you press and release the button, it should type "hello world".
 
 ---
 
-### Example 3: Get Button State
+### Example 2: Alternate Mode
 
-This command queries the button for its current physical state (pressed or released).
+This command configures the button to type "first" on the first press, and "second" on the second press, and so on.
+
+**Command:**
+```bash
+./usbbutton_tool --configure --permanent --mode alternate --text1 "first" --text2 "second" --released-color 0,255,0 --pressed-color 255,0,0
+```
+
+**Expected Effect:**
+1.  **Initial State:** The button's LED should be green.
+2.  **First Press:** When you press the button, it should type "first".
+3.  **Second Press:** When you press the button again, it should type "second".
+4.  **Third Press:** It should type "first" again.
+
+---
+
+### Example 3: Extended Mode
+
+This command configures the button to type "short" on a short press, and "long" on a long press.
+
+**Command:**
+```bash
+./usbbutton_tool --configure --permanent --mode extended --text1 "short" --text2 "long" --released-color 0,255,0 --pressed-color 255,0,0
+```
+
+**Expected Effect:**
+1.  **Initial State:** The button's LED should be green.
+2.  **Short Press:** A quick press and release should type "short".
+3.  **Long Press:** Pressing and holding the button for a second or two before releasing should type "long".
+
+---
+
+### Example 4: Single Key (Hold) Mode
+
+This command configures the button to act like a single keyboard key ('a').
+
+**Command:**
+```bash
+./usbbutton_tool --configure --permanent --mode default --text "a" --released-color 0,255,0 --pressed-color 255,0,0
+```
+
+**Expected Effect:**
+1.  **Initial State:** The button's LED should be green.
+2.  **Press and Hold:** The LED should turn red. While you are holding the button down, it should act as if you are holding down the 'a' key on your keyboard (e.g., it should type 'aaaaaaaaa...').
+3.  **Release:** When you release the button, the 'a' key should also be released.
+
+---
+
+### Example 5: Get Button State
+
+This command queries the button for its current physical state.
 
 **Command (when NOT pressing the button):**
 ```bash
@@ -51,20 +81,10 @@ This command queries the button for its current physical state (pressed or relea
 ```
 
 **Expected Effect:**
-The tool should print the following output to your terminal:
-```
-Button state: Released
-```
+The tool should print: `Button state: Released`
 
-**Command (while holding the button down):**
-```bash
-./usbbutton_tool --get-state
-```
+---
 
-**Expected Effect:**
-The tool should print the following output to your terminal:
-```
-Button state: Pressed
-```
+### A Note on Control Sequences (e.g., Ctrl+R)
 
-Please let me know the results of these tests, and we can continue debugging from there.
+Support for sending modifier keys like `Ctrl`, `Shift`, or `Alt` is not yet implemented. The device's configuration protocol for this is not documented in the available source code. This feature can be added in the future if more information becomes available.

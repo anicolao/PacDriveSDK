@@ -28,7 +28,7 @@ Programs the USB Button with the specified configuration data and stores it in t
 
 ### `bool USBButtonConfigureTemporary(int id, byte[] data)`
 
-Programs the USB Button with the specified configuration data. This configuration is stored in the device's volatile memory and will be lost when the device is powered off.
+Programs the USB Button with the specified configuration data. This configuration is stored in the device's volatile memory and will be lost when the device is powered off. It has been reported that this command may not work on all device firmwares.
 
 - **`id`**: The device ID of the USB Button.
 - **`data`**: A 62-byte array containing the configuration data. See section 4 for a detailed breakdown of this data structure.
@@ -62,7 +62,9 @@ The `USBButtonConfigurePermanent` and `USBButtonConfigureTemporary` functions us
 | 1 | **Spare** |
 | 2-4 | **Released Color (RGB)** |
 | 5-7 | **Pressed Color (RGB)** |
-| 8-61| **String Data** |
+| 8-31| **Text 1 (24 bytes)** |
+| 32-55| **Text 2 (24 bytes)** |
+| 56-61| **Spare (6 bytes)** |
 
 ---
 
@@ -70,17 +72,17 @@ The `USBButtonConfigurePermanent` and `USBButtonConfigureTemporary` functions us
 
 This byte determines the button's operational mode.
 
-- `0x00`: **Alternate Mode** - The button's behavior may toggle or alternate between states on each press.
-- `0x01`: **Extended Mode**
-- `0x02`: **Both**
+- `0x00`: **Alternate Mode** - On first press, sends keys from Text 1. On second press, sends keys from Text 2.
+- `0x01`: **Extended Mode** - On a short press, sends keys from Text 1. On a long press, sends keys from Text 2.
+- `0x02`: **Default Mode** - Sends the entire 48+ key sequence from Text 1 and Text 2 on every press.
 
-*Note: The provided example application only uses Alternate Mode (`0x00`). The exact behavior of the other modes is not documented in the source code.*
+*Note: The C# source code comment for mode `02` says "both", which is interpreted as the default "send all keys" mode.*
 
 ---
 
-### 4.2. Byte 1: Spare
+### 4.2. Bytes 1, 56-61: Spare
 
-This byte is currently unused and should be set to `0x00`.
+These bytes are currently unused and should be set to `0x00`.
 
 ---
 
@@ -104,15 +106,26 @@ These three bytes define the color of the RGB LED when the button is in the **pr
 
 ---
 
-### 4.5. Bytes 8-61: String Data
+### 4.5. Bytes 8-55: String Data
 
-These 54 bytes represent a string of characters that the USB Button will send as keystrokes when pressed. The string is encoded as a sequence of bytes, where each byte corresponds to a USB HID Usage ID for a keyboard character.
+These bytes represent the string(s) of characters that the USB Button will send as keystrokes. The string data is split into two 24-byte chunks.
 
-The encoding scheme is as follows:
+- **Bytes 8-31**: **Text 1**. Used for the first press in Alternate mode, the short press in Extended mode, or the first half of the sequence in Default mode.
+- **Bytes 32-55**: **Text 2**. Used for the second press in Alternate mode, the long press in Extended mode, or the second half of the sequence in Default mode.
+
+The string is encoded as a sequence of bytes, where each byte corresponds to a USB HID Usage ID for a keyboard character.
 
 | Character | HID Usage ID (Decimal) | HID Usage ID (Hex) |
 |---|---|---|
 | 'A' - 'Z' | 4 - 29 | 0x04 - 0x1D |
 | Space | 44 | 0x2C |
 
-*Note: The character-to-byte mapping is derived from the `GetUSBButtonData` function in the C# example. For 'A' to 'Z', the formula is `(byte)(character - 61)`. The string should be converted to uppercase before encoding. Any unused bytes in this 54-byte field should be padded with zeros.*
+*Note: The character-to-byte mapping is `(byte)(character - 'A' + 4)`. The string should be converted to uppercase before encoding. Any unused bytes should be padded with zeros.*
+
+### 4.6. Single Key (Hold) Mode
+
+If the configured text is a single character (e.g., "a"), the device firmware will automatically enter a "one key keyboard" mode. In this mode, the key will be held down as long as the button is pressed, and released when the button is released.
+
+### 4.7. Modifier Keys (e.g., Ctrl, Shift)
+
+The method for encoding modifier keys is not documented in the available source code and is currently not supported by this specification.
