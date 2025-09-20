@@ -159,19 +159,18 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--verbose") == 0) verbose = 1;
     }
 
-    if (mode == 3) {
-        config_data[0] = 2;
+    config_data[0] = mode;
+
+    if (mode == 0) {
+        encode_text_chunk(text1, &config_data[8], TEXT_CHUNK_SIZE);
+        encode_text_chunk(text2, &config_data[8 + TEXT_CHUNK_SIZE], TEXT_CHUNK_SIZE);
+    } else if (mode == 1) {
+        if (keys) encode_consumer_keys(keys, &config_data[8], KEY_BUFFER_SIZE);
+    } else if (mode == 3) {
         if (macro) encode_macro(macro, &config_data[8], KEY_BUFFER_SIZE);
-    } else {
-        config_data[0] = mode;
-        if (mode == 0) {
-            encode_text_chunk(text1, &config_data[8], TEXT_CHUNK_SIZE);
-            encode_text_chunk(text2, &config_data[8 + TEXT_CHUNK_SIZE], TEXT_CHUNK_SIZE);
-        } else if (mode == 1) {
-            if (keys) encode_consumer_keys(keys, &config_data[8], KEY_BUFFER_SIZE);
-        } else {
-            encode_text_chunk(text, &config_data[8], KEY_BUFFER_SIZE);
-        }
+    }
+    else { // mode 2
+        encode_text_chunk(text, &config_data[8], KEY_BUFFER_SIZE);
     }
 
     unsigned char report_buf[65] = {0};
