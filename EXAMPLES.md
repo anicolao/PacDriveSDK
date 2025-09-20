@@ -1,8 +1,8 @@
 # USB Button Tool Examples
 
-This document provides examples for the `usbbutton_tool`, which allows you to configure the USB Button's colors and key press actions.
+This document provides the final, working examples for the `usbbutton_tool`.
 
-**Note:** You may need to run these commands with `sudo` depending on your system's USB device permissions. All configuration is done with the `--configure` command.
+**Note:** You may need to run these commands with `sudo` depending on your system's USB device permissions.
 
 ---
 
@@ -21,57 +21,37 @@ sudo ./usbbutton_tool --configure --permanent --mode default --text "hello" --re
 
 ---
 
-### Example 2: Extended Mode (Multimedia Keys)
+### Example 2: Extended Mode (Multimedia Keys) - Should Work Now
 
-This command configures the button to send multimedia key commands. The `extended` mode tells the button to interpret the key codes as multimedia keys.
+This command configures the button to send a **Volume Up** command. The `extended` mode (`mode=1`) tells the button to interpret the key data as multimedia key scancodes.
 
 **Command:**
 ```bash
-sudo ./usbbutton_tool --configure --permanent --mode extended --keys "volume_up,volume_down,mute" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./usbbutton_tool --configure --permanent --mode extended --keys "volume_up" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Expected Effect:**
 *   The button's LED should be green.
-*   The first press should increase the system volume.
-*   The second press should decrease the system volume.
-*   The third press should mute/unmute the system volume.
+*   When you press the button, the system volume should increase. You can verify this with `evtest` on the **Consumer Control** interface (`/dev/input/event10`).
 
 ---
 
-### Example 3: Macro Mode (Ctrl+R)
+### Example 3: Macro Mode (Ctrl+R) - The Correct Version
 
-This command configures the button to send a `Ctrl+R` key combination. The `macro` mode tells the button to interpret the data as raw 8-byte HID keyboard reports.
-
-**Format:** `MODIFIER:RESERVED:KEY1:KEY2:KEY3:KEY4:KEY5:KEY6`
+This command configures the button to send a `Ctrl+R` key combination. We now know the key data buffer is a list of keys to press simultaneously.
 
 **Command:**
 ```bash
-sudo ./usbbutton_tool --configure --permanent --mode macro --macro "01:00:15:00:00:00:00:00,00:00:00:00:00:00:00:00" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./usbbutton_tool --configure --permanent --mode macro --macro "E0:15:00:00:00:00:00:00,00:00:00:00:00:00:00:00" --released-color 0,255,0 --pressed-color 255,0,0
 ```
 
 **Breakdown of the `--macro` string:**
-*   `01:00:15:00:00:00:00:00`: This is the "press" report.
-    *   `01`: Modifier byte for Left Control.
-    *   `15`: HID usage ID for the 'r' key.
+*   `E0:15:00:00:00:00:00:00`: This is the "press" report.
+    *   `E0`: The HID Usage ID for **Left Control**.
+    *   `15`: The HID Usage ID for the 'r' key.
 *   `,` : Separates the press report from the release report.
-*   `00:00:00:00:00:00:00:00`: This is the "release" report (all keys and modifiers are up).
+*   `00:00:00:00:00:00:00:00`: This is the "release" report (all keys up).
 
 **Expected Effect:**
 *   The button's LED should be green.
-*   When you press the button, it should send a `Ctrl+R` key combination.
-
----
-
-### Example 4: Single Key (Hold) Mode
-
-This command configures the button to act like the 'a' key on a keyboard. This is a special case of `default` mode.
-
-**Command:**
-```bash
-sudo ./usbbutton_tool --configure --permanent --mode default --text "a" --released-color 0,255,0 --pressed-color 255,0,0
-```
-
-**Expected Effect:**
-*   The button's LED should be green.
-*   When you press and hold the button, it should act as if you are holding down the 'a' key (e.g., it should type 'aaaaaaaaa...').
-*   When you release the button, the 'a' key should also be released.
+*   When you press the button, it should send a `Ctrl+R` key combination. You can verify this with `evtest` on the **Keyboard** interface (`/dev/input/event11`). You should see events for `KEY_LEFTCTRL` and `KEY_R` being pressed and released together.

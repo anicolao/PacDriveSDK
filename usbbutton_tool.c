@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
     }
     free(config_path);
 
-    unsigned char config_data[62] = {0};
+    unsigned char config_buffer[62] = {0};
     unsigned char command = 0x51;
     int verbose = 0;
     const char *text = NULL, *text1 = NULL, *text2 = NULL, *keys = NULL, *macro = NULL;
@@ -142,8 +142,8 @@ int main(int argc, char* argv[]) {
 
     for (int i = 2; i < argc; i++) {
         if (strcmp(argv[i], "--permanent") == 0) command = 0x50;
-        else if (strcmp(argv[i], "--released-color") == 0 && i + 1 < argc) sscanf(argv[++i], "%hhu,%hhu,%hhu", &config_data[2], &config_data[3], &config_data[4]);
-        else if (strcmp(argv[i], "--pressed-color") == 0 && i + 1 < argc) sscanf(argv[++i], "%hhu,%hhu,%hhu", &config_data[5], &config_data[6], &config_data[7]);
+        else if (strcmp(argv[i], "--released-color") == 0 && i + 1 < argc) sscanf(argv[++i], "%hhu,%hhu,%hhu", &config_buffer[2], &config_buffer[3], &config_buffer[4]);
+        else if (strcmp(argv[i], "--pressed-color") == 0 && i + 1 < argc) sscanf(argv[++i], "%hhu,%hhu,%hhu", &config_buffer[5], &config_buffer[6], &config_buffer[7]);
         else if (strcmp(argv[i], "--text") == 0 && i + 1 < argc) text = argv[++i];
         else if (strcmp(argv[i], "--text1") == 0 && i + 1 < argc) text1 = argv[++i];
         else if (strcmp(argv[i], "--text2") == 0 && i + 1 < argc) text2 = argv[++i];
@@ -159,41 +159,51 @@ int main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--verbose") == 0) verbose = 1;
     }
 
-    config_data[0] = mode;
-
-    if (mode == 0) {
-        encode_text_chunk(text1, &config_data[8], TEXT_CHUNK_SIZE);
-        encode_text_chunk(text2, &config_data[8 + TEXT_CHUNK_SIZE], TEXT_CHUNK_SIZE);
-    } else if (mode == 1) {
-        if (keys) encode_consumer_keys(keys, &config_data[8], KEY_BUFFER_SIZE);
-    } else if (mode == 3) {
-        if (macro) encode_macro(macro, &config_data[8], KEY_BUFFER_SIZE);
+    config_buffer[0] = mode;
+    if (mode == 3) { // Macro mode
+        config_buffer[0] = 2; // Tell firmware it's a keyboard-style report
+        if (macro) encode_macro(macro, &config_buffer[8], KEY_BUFFER_SIZE);
+    } else if (mode == 0) { // Alternate mode
+        encode_text_chunk(text1, &config_buffer[8], TEXT_CHUNK_SIZE);
+        encode_text_chunk(text2, &config_buffer[8 + TEXT_CHUNK_SIZE], TEXT_CHUNK_SIZE);
+    } else if (mode == 1) { // Extended mode
+        if (keys) encode_consumer_keys(keys, &config_buffer[8], KEY_BUFFER_SIZE);
+    } else { // Default mode
+        encode_text_chunk(text, &config_buffer[8], KEY_BUFFER_SIZE);
     }
-    else { // mode 2
-        encode_text_chunk(text, &config_data[8], KEY_BUFFER_SIZE);
-    }
 
-    unsigned char report_buf[65] = {0};
-    report_buf[0] = 0x0;
+    // This section is a direct translation of the C++ DLL's writing logic.
+    unsigned char report_buf[5] = {0}; // Report ID (0) + 4 bytes of data
+
+    // First, send the command report
+    report_buf[0] = 0x0; // Report ID
     report_buf[1] = command;
     report_buf[2] = 0xdd;
-    report_buf[3] = config_data[0];
-    report_buf[4] = config_data[1];
+    report_buf[3] = config_buffer[0]; // Mode
+    report_buf[4] = config_buffer[1]; // Spare
 
     if (verbose) print_packet(report_buf, 5);
     if (hid_write(handle, report_buf, 5) == -1) {
         fprintf(stderr, "Error writing command to device.\n");
-    } else {
-        for (int i = 0; i < 15; i++) {
-            memcpy(&report_buf[1], &config_data[2 + i * 4], 4);
-            if (verbose) print_packet(report_buf, 5);
-            if (hid_write(handle, report_buf, 5) == -1) {
-                fprintf(stderr, "Error writing data packet %d.\n", i);
-                break;
-            }
-        }
-        printf("Configuration sent successfully.\n");
+        hid_close(handle);
+        hid_exit();
+        return 1;
     }
+
+    // Now, send the 60 bytes of config data in 15 4-byte chunks
+    unsigned char data_chunk[5] = {0}; // Report ID (0) + 4 bytes
+    data_chunk[0] = 0x0; // Report ID
+
+    for (int i = 0; i < 15; i++) {
+        memcpy(&data_chunk[1], &config_buffer[2 + i * 4], 4);
+        if (verbose) print_packet(data_chunk, 5);
+        if (hid_write(handle, data_chunk, 5) == -1) {
+            fprintf(stderr, "Error writing data packet %d.\n", i);
+            break;
+        }
+    }
+
+    printf("Configuration sent successfully.\n");
 
     hid_close(handle);
     hid_exit();

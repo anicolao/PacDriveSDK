@@ -20,7 +20,7 @@ Configuration is sent to a specific configuration interface on the device.
 
 ## 3. Configuration Protocol
 
-Configuration is performed by sending a sequence of HID reports to the **Configuration Interface**.
+Configuration is performed by sending a sequence of HID reports to the **Configuration Interface** (`usage_page = 0`).
 
 ### 3.1. Initial Report
 
@@ -52,8 +52,9 @@ Following the initial report, 15 subsequent 4-byte reports are sent, containing 
 ### 4.1. Mode (Set in Initial Report)
 
 - `0x00`: **Alternate Mode**: The Key Data contains two 24-byte chunks of standard keyboard scancodes. The first press sends the first chunk, the second press sends the second chunk.
-- `0x01`: **Extended Mode**: The Key Data contains a sequence of single-byte scancodes from the Consumer HID Page (e.g., for multimedia keys).
-- `0x02`: **Default/Macro Mode**: The Key Data contains a sequence of standard keyboard scancodes or a sequence of raw 8-byte HID keyboard reports for macros with modifiers.
+- `0x01`: **Extended Mode**: The Key Data is treated as a sequence of single-byte scancodes from the Consumer HID Page (e.g., for multimedia keys).
+- `0x02`: **Default Mode**: The Key Data is treated as a sequence of standard keyboard scancodes.
+- `0x03`: **Macro Mode**: The Key Data is treated as a sequence of up to six 8-byte chunks. Each chunk represents a set of keys to be pressed simultaneously.
 
 ---
 
@@ -63,9 +64,8 @@ This 54-byte buffer's interpretation depends on the **Mode**.
 
 - **Default/Alternate Modes:** Contains single-byte HID Keyboard Usage IDs (e.g., 'a' is `0x04`).
 - **Extended Mode:** Contains single-byte HID Consumer Page Usage IDs (e.g., Volume Up is `0xE9`).
-- **Macro Mode:** Contains a sequence of raw 8-byte HID keyboard reports. This allows for sending modifier keys like `Ctrl`.
-    - **Report Format:** `MODIFIER:RESERVED:KEY1:KEY2:KEY3:KEY4:KEY5:KEY6`
-    - **Example `Ctrl+R`:** A report of `01:00:15:00:00:00:00:00` (press) followed by `00:00:00:00:00:00:00:00` (release).
+- **Macro Mode:** Contains a sequence of up to six 8-byte chunks. Each chunk is a list of up to 6 simultaneous key presses (plus 2 spare bytes). To send a modifier key like `Ctrl`, its HID Usage ID (`0xE0`) is included in the chunk along with the other key(s).
+    - **Example `Ctrl+R`:** A chunk of `E0:15:00:00:00:00:00:00` would press Left Control and R simultaneously. A subsequent "all keys up" chunk (`00:00...`) is required to release them.
 
 ---
 
