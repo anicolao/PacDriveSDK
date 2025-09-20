@@ -9,29 +9,21 @@
 #define KEY_BUFFER_SIZE 54
 #define TEXT_CHUNK_SIZE 24
 
-typedef struct {
-    const char *name;
-    unsigned char id;
-} KeyCode;
-
-KeyCode consumer_keys[] = {
-    {"play_pause", 0xCD}, {"stop", 0xB7}, {"scan_next", 0xB5},
-    {"scan_prev", 0xB6}, {"volume_up", 0xE9}, {"volume_down", 0xEA},
-    {"mute", 0xE2}, {NULL, 0}
-};
-
 void print_usage() {
     printf("Usage: usbbutton_tool --configure [options]\n");
+    printf("\nDescription:\n");
+    printf("  Configures the USB Button's color and the key sequence it sends on press.\n");
+    printf("  Note: Modifier keys (Ctrl, Shift, etc.) and multimedia keys are not supported\n");
+    printf("        by the device's firmware via this configuration method.\n");
     printf("\nOptions:\n");
     printf("  --permanent           Make the configuration permanent.\n");
     printf("  --released-color R,G,B  Set the color when the button is released.\n");
     printf("  --pressed-color R,G,B   Set the color when the button is pressed.\n");
-    printf("  --mode <mode>         'default', 'alternate', 'extended', 'macro'\n");
-    printf("  --text \"...\"          Text for default mode.\n");
-    printf("  --text1 \"...\"         Text for alternate mode (first press).\n");
-    printf("  --text2 \"...\"         Text for alternate mode (second press).\n");
-    printf("  --keys \"key1,...\"     Keys for extended mode (e.g., volume_up,mute).\n");
-    printf("  --macro \"...\"         Macro for macro mode. See EXAMPLES.md for format.\n");
+    printf("  --mode <mode>         'default' or 'alternate'.\n");
+    printf("  --text \"...\"          Text for default mode (up to 54 chars).\n");
+    printf("  --text1 \"...\"         Text for alternate mode (first press, up to 24 chars).\n");
+    printf("  --text2 \"...\"         Text for alternate mode (second press, up to 24 chars).\n");
+    printf("  --hex-codes \"C1,C2..\" For sending multi-key presses (chords). See examples.\n");
     printf("  --verbose             Print the raw data packets being sent.\n");
 }
 
@@ -56,37 +48,13 @@ void encode_text_chunk(const char *text, unsigned char *buffer, int max_len) {
     }
 }
 
-void encode_consumer_keys(const char *keys_str, unsigned char *buffer, int max_len) {
-    char *keys = strdup(keys_str);
-    char *token = strtok(keys, ",");
+void encode_hex_codes(const char *hex_str, unsigned char *buffer, int max_len) {
+    char *s = strdup(hex_str);
+    char *token = strtok(s, ",");
     int i = 0;
     while (token != NULL && i < max_len) {
-        int found = 0;
-        for (int j = 0; consumer_keys[j].name != NULL; j++) {
-            if (strcmp(token, consumer_keys[j].name) == 0) {
-                buffer[i] = consumer_keys[j].id;
-                found = 1;
-                break;
-            }
-        }
-        if (!found) fprintf(stderr, "Warning: Unknown key '%s'\n", token);
+        buffer[i++] = (unsigned char)strtol(token, NULL, 16);
         token = strtok(NULL, ",");
-        i++;
-    }
-    free(keys);
-}
-
-void encode_macro(const char *macro_str, unsigned char *buffer, int max_len) {
-    char *s = strdup(macro_str);
-    char *report_token = strtok(s, ",");
-    int byte_index = 0;
-    while(report_token != NULL && byte_index < max_len) {
-        char *hex_token = strtok(report_token, ":");
-        while(hex_token != NULL && byte_index < max_len) {
-            buffer[byte_index++] = (unsigned char)strtol(hex_token, NULL, 16);
-            hex_token = strtok(NULL, ":");
-        }
-        report_token = strtok(NULL, ",");
     }
     free(s);
 }
@@ -137,7 +105,7 @@ int main(int argc, char* argv[]) {
     unsigned char config_buffer[62] = {0};
     unsigned char command = 0x51;
     int verbose = 0;
-    const char *text = NULL, *text1 = NULL, *text2 = NULL, *keys = NULL, *macro = NULL;
+    const char *text = NULL, *text1 = NULL, *text2 = NULL, *hex_codes = NULL;
     int mode = 2;
 
     for (int i = 2; i < argc; i++) {
@@ -147,36 +115,30 @@ int main(int argc, char* argv[]) {
         else if (strcmp(argv[i], "--text") == 0 && i + 1 < argc) text = argv[++i];
         else if (strcmp(argv[i], "--text1") == 0 && i + 1 < argc) text1 = argv[++i];
         else if (strcmp(argv[i], "--text2") == 0 && i + 1 < argc) text2 = argv[++i];
-        else if (strcmp(argv[i], "--keys") == 0 && i + 1 < argc) keys = argv[++i];
-        else if (strcmp(argv[i], "--macro") == 0 && i + 1 < argc) macro = argv[++i];
+        else if (strcmp(argv[i], "--hex-codes") == 0 && i + 1 < argc) hex_codes = argv[++i];
         else if (strcmp(argv[i], "--mode") == 0 && i + 1 < argc) {
             i++;
             if (strcmp(argv[i], "alternate") == 0) mode = 0;
-            else if (strcmp(argv[i], "extended") == 0) mode = 1;
             else if (strcmp(argv[i], "default") == 0) mode = 2;
-            else if (strcmp(argv[i], "macro") == 0) mode = 3;
-            else { fprintf(stderr, "Invalid mode specified.\n"); return 1; }
+            else { fprintf(stderr, "Invalid mode specified. Only 'default' and 'alternate' are supported.\n"); return 1; }
         } else if (strcmp(argv[i], "--verbose") == 0) verbose = 1;
     }
 
     config_buffer[0] = mode;
-    if (mode == 3) { // Macro mode
-        config_buffer[0] = 2; // Tell firmware it's a keyboard-style report
-        if (macro) encode_macro(macro, &config_buffer[8], KEY_BUFFER_SIZE);
-    } else if (mode == 0) { // Alternate mode
+
+    if (mode == 0) {
         encode_text_chunk(text1, &config_buffer[8], TEXT_CHUNK_SIZE);
         encode_text_chunk(text2, &config_buffer[8 + TEXT_CHUNK_SIZE], TEXT_CHUNK_SIZE);
-    } else if (mode == 1) { // Extended mode
-        if (keys) encode_consumer_keys(keys, &config_buffer[8], KEY_BUFFER_SIZE);
-    } else { // Default mode
-        encode_text_chunk(text, &config_buffer[8], KEY_BUFFER_SIZE);
+    } else { // mode 2
+        if (hex_codes) {
+            encode_hex_codes(hex_codes, &config_buffer[8], KEY_BUFFER_SIZE);
+        } else if (text) {
+            encode_text_chunk(text, &config_buffer[8], KEY_BUFFER_SIZE);
+        }
     }
 
-    // This section is a direct translation of the C++ DLL's writing logic.
-    unsigned char report_buf[5] = {0}; // Report ID (0) + 4 bytes of data
-
-    // First, send the command report
-    report_buf[0] = 0x0; // Report ID
+    unsigned char report_buf[5] = {0};
+    report_buf[0] = 0x0;
     report_buf[1] = command;
     report_buf[2] = 0xdd;
     report_buf[3] = config_buffer[0]; // Mode
@@ -190,10 +152,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Now, send the 60 bytes of config data in 15 4-byte chunks
-    unsigned char data_chunk[5] = {0}; // Report ID (0) + 4 bytes
-    data_chunk[0] = 0x0; // Report ID
-
+    unsigned char data_chunk[5] = {0};
+    data_chunk[0] = 0x0;
     for (int i = 0; i < 15; i++) {
         memcpy(&data_chunk[1], &config_buffer[2 + i * 4], 4);
         if (verbose) print_packet(data_chunk, 5);
