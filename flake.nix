@@ -18,8 +18,9 @@
           # Add the required packages to the development environment
           buildInputs = [
             pkgs.gcc
-            pkgs.make
+            pkgs.gnumake
             pkgs.hidapi
+            pkgs.pkg-config
           ];
         };
       }

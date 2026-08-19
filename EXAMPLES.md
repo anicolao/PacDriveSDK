@@ -1,73 +1,52 @@
-# USB Button Tool Examples
+# USB Button tool examples
 
-This document provides examples for the final, working version of the `usbbutton_tool`.
+Build in the Nix development shell:
 
-**Conclusion from our testing:** The device firmware only supports programming standard keyboard key sequences. It does not support modifier keys (like Ctrl) or multimedia keys via this configuration method.
-
-**Note:** You may need to run these commands with `sudo` depending on your system's USB device permissions.
-
----
-
-### Example 1: Default Mode (Send Text)
-
-This command configures the button to type "hello" when pressed.
-
-**Command:**
 ```bash
-sudo ./usbbutton_tool --configure --permanent --mode default --text "hello" --released-color 0,255,0 --pressed-color 255,0,0
+nix develop --command make check
 ```
 
-**Expected Effect:**
-*   The button's LED should be green.
-*   When you press the button, it should type "hello".
+List matching HID interfaces:
 
----
-
-### Example 2: Alternate Mode
-
-This command configures the button to type "first" on the first press, and "second" on the second press.
-
-**Command:**
 ```bash
-sudo ./usbbutton_tool --configure --permanent --mode alternate --text1 "first" --text2 "second" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./build/usbbutton_tool --list
 ```
 
-**Expected Effect:**
-*   The button's LED should be green.
-*   On the first press, it should type "first".
-*   On the second press, it should type "second".
+Back up and decode the current 64-byte configuration:
 
----
-
-### Example 3: Multi-Key Press (Chord)
-
-This command configures the button to press the 'F8' and 'R' keys simultaneously. This is useful for mapping to hotkeys in applications.
-
-**Command:**
 ```bash
-sudo ./usbbutton_tool --configure --permanent --mode default --hex-codes "41,15" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./build/usbbutton_tool --read --output usbbutton-backup.ubn
 ```
 
-**Breakdown of the `--hex-codes` string:**
-*   `41`: The HID Usage ID for the `F8` key.
-*   `15`: The HID Usage ID for the `R` key.
+Configure Ctrl+W while preserving the current colors and reserved settings:
 
-**Expected Effect:**
-*   The button's LED should be green.
-*   When you press the button, it should send `F8` and `R` key presses at the same time.
-
----
-
-### Example 4: Single Key (Hold) Mode
-
-This command configures the button to act like the 'a' key on a keyboard.
-
-**Command:**
 ```bash
-sudo ./usbbutton_tool --configure --permanent --mode default --text "a" --released-color 0,255,0 --pressed-color 255,0,0
+sudo ./build/usbbutton_tool \
+  --configure \
+  --input usbbutton-backup.ubn \
+  --permanent \
+  --mode extended \
+  --primary 'ctrl+w' \
+  --secondary '' \
+  --output ctrl-w.ubn \
+  --verbose
 ```
 
-**Expected Effect:**
-*   The button's LED should be green.
-*   When you press and hold the button, it should act as if you are holding down the 'a' key (e.g., it should type 'aaaaaaaaa...').
-*   When you release the button, the 'a' key should also be released.
+The tool writes `70 1a 00 00 00 00` into the first primary row. `0x70` is the
+USB Button firmware's private Left Ctrl value; `0x1a` is the standard HID usage
+for W. The tool reads the configuration back and verifies it by default.
+
+Rows are separated by semicolons. This opens the Run dialog in one row and
+types `www.us` after the GUI modifier is released at the row boundary:
+
+```bash
+--primary 'win+r;w,w,w,period,u,s'
+```
+
+Generate a configuration without accessing hardware:
+
+```bash
+./build/usbbutton_tool \
+  --configure --dry-run --permanent --mode extended \
+  --primary 'ctrl+w' --output ctrl-w.ubn
+```

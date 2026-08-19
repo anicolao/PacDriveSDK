@@ -1,62 +1,83 @@
-# USB Button Specification
+# Ultimarc USB Button configuration protocol
 
-This document provides a detailed specification for the Ultimarc USB Button device, based on reverse-engineering the available source code and direct experimentation.
+This specification is based on the vendor SDK, the official USB Button manual,
+and the decompiled 2016 `USB_Button.exe` configuration utility. The utility is
+important because the older SDK exposes only an opaque byte array and its sample
+GUI does not implement the complete key grid.
 
-## 1. Overview
+## Device and interface
 
-The USB Button is a programmable USB device with a single push-button and an RGB LED. It is a composite USB device that presents multiple HID interfaces, but configuration only affects the standard Keyboard interface.
+- USB vendor ID: `0xd209`
+- USB product ID: `0x1200`
+- Configuration HID interface: usage page `0x01`, usage `0x00`
+- Keyboard HID interface: usage page `0x01`, usage `0x06`
 
-**Conclusion:** The device's firmware can be programmed to send sequences of standard keyboard scancodes. It can send multiple keys simultaneously (chords). However, it **cannot** be programmed to send modifier keys (Ctrl, Shift, Alt) or multimedia keys (Volume, Mute, etc.) via this configuration protocol.
+Configuration reports must be sent to the usage-0 interface, not to the
+keyboard interface. An unnumbered output report is five bytes as seen by
+HIDAPI: a zero report ID followed by four payload bytes.
 
-## 2. Device Identification
+## 64-byte configuration
 
-- **Vendor ID:** `0xd209`
-- **Product ID:** `0x1200`
-- **Configuration Interface:** The device is configured by sending reports to the HID interface with Usage Page `0x0`.
+The complete configuration is divided into sixteen four-byte output reports.
 
-## 3. Configuration Protocol
-
-Configuration is performed by sending a sequence of HID reports to the Configuration Interface.
-
-### 3.1. Initial Report
-
-A 4-byte report is sent to initiate the configuration sequence.
-
-| Byte 0 | Byte 1 | Byte 2 | Byte 3 |
-|---|---|---|---|
-| Command | `0xdd` | Mode | Spare |
-
-- **Command:** `0x50` for permanent storage, `0x51` for temporary.
-- **Mode:** Determines how the Key Data is interpreted. See section 4.1.
-
-### 3.2. Data Reports
-
-Following the initial report, 15 subsequent 4-byte reports are sent, containing the 60 bytes of configuration data.
-
-## 4. Configuration Data Structure (60 bytes)
-
-| Byte(s) | Description |
+| Byte(s) | Meaning |
 |---|---|
-| 0-1 | **Spare** |
-| 2-4 | **Released Color (RGB)** |
-| 5-7 | **Pressed Color (RGB)** |
-| 8-61| **Key Data (54 bytes)** |
+| 0 | Command: `0x50` permanent, `0x51` temporary |
+| 1 | Protocol marker `0xdd` |
+| 2 | Action mode |
+| 3 | Bluetooth settings/reserved; official utility defaults to `0x11` |
+| 4-6 | Released RGB color |
+| 7-9 | Pressed RGB color |
+| 10-33 | Primary key sequence: four rows of six cells |
+| 34-57 | Secondary key sequence: four rows of six cells |
+| 58-62 | Reserved |
+| 63 | BluButton LED time; unused by the USB model |
 
----
+The action modes are:
 
-### 4.1. Mode (Set in Initial Report)
+- `0x00` — **Alternate:** primary and secondary on alternate presses.
+- `0x01` — **Extended:** primary followed by secondary on every press.
+- `0x02` — **Both:** primary on a short press, secondary on a long press.
 
-- `0x00`: **Alternate Mode**: The Key Data contains two 24-byte chunks of standard keyboard scancodes. The first press sends the first chunk, the second press sends the second chunk.
-- `0x02`: **Default Mode**: The Key Data is treated as a sequence of standard keyboard scancodes.
+## Key rows and modifiers
 
----
+Each sequence is a 4x6 grid. Cells are processed left-to-right and then
+top-to-bottom. A modifier in a row remains held through the later cells in that
+row and is released at the row boundary. For example, Ctrl+W is encoded in one
+row as:
 
-### 4.2. Key Data (Bytes 8-61)
+```text
+70 1a 00 00 00 00
+```
 
-This 54-byte buffer contains a sequence of single-byte HID Keyboard Usage IDs (e.g., 'a' is `0x04`, 'F8' is `0x41`). The firmware interprets non-zero bytes in this buffer as keys to be pressed simultaneously. To create a sequence of individual key presses, place one scancode in each 8-byte block of the buffer.
+Ordinary keys use USB HID Keyboard Usage IDs (`W` is `0x1a`), but the device's
+stored modifier codes are private values:
 
----
+| Key | Stored value | Standard HID usage |
+|---|---:|---:|
+| Left Ctrl | `0x70` | `0xe0` |
+| Left Shift | `0x71` | `0xe1` |
+| Left Alt | `0x72` | `0xe2` |
+| Left GUI/Win | `0x73` | `0xe3` |
+| Right Ctrl | `0x74` | `0xe4` |
+| Right Shift | `0x75` | `0xe5` |
+| Right Alt | `0x76` | `0xe6` |
+| Right GUI/Win | `0x77` | `0xe7` |
 
-### 4.3. Single Key (Hold) Mode
+This translation is why writing `0xe0` directly did not produce Ctrl in the
+earlier reverse-engineered tool. The official manual explicitly supports
+modifier chords such as Ctrl+Alt+Delete.
 
-If the configured key data contains only a single non-zero scancode, the device firmware automatically enters a "one key keyboard" mode, holding the key down as long as the button is pressed.
+## Reading and verification
+
+Send the four-byte payload `59 dd 00 00` to request the stored configuration.
+The device replies with sixteen four-byte input reports. The official utility
+may receive and discard an initial all-zero report, waits for the response, and
+compares configuration bytes 2 through 61 after programming.
+
+## Sources
+
+- [Official USB Button manual](https://www.usbbutton.com/docs/USBButton.pdf)
+- `dll/PacDrive.cpp` in this repository for the older write protocol
+- Official `USB_Button.exe` configuration utility, particularly its decompiled
+  `KeyClass` and `DeviceManager` classes

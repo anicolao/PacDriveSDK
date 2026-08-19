@@ -27,6 +27,21 @@ It contains source code projects for the following languages:
 - VB6
 - VB.NET
 
+## Linux USB Button tool
+
+This fork includes a portable HIDAPI command-line tool for reading, backing up,
+and programming the USB Button on Linux, including AArch64 systems. Build and
+run its offline Ctrl+W encoding check with:
+
+```bash
+nix develop --command make check
+```
+
+See [EXAMPLES.md](EXAMPLES.md) for usage and
+[USB_BUTTON_SPEC.md](USB_BUTTON_SPEC.md) for the corrected protocol. In
+particular, the button stores modifiers using private values `0x70..0x77`, not
+the standard HID values `0xe0..0xe7`.
+
 ## API
 
 ### Common Functions (All Boards)
